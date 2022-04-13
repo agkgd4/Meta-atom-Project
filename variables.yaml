@@ -1,0 +1,114 @@
+#==============================
+#    Simulation Variables
+#==============================
+# This is the file for updating variables
+#===========================
+#     Cell Size
+#===========================
+cell_config:
+  cell_x : 0.68
+  cell_y : 6.68
+  cell_z : 0
+
+  #======================
+  #     Resolution
+  #======================
+
+  resolution : 10
+
+  #===========================
+  # Perfectly Matched Layers
+  #===========================
+
+  pml_thickness : 0.775
+  
+  #===========================
+  # k point values
+  #===========================
+  
+  freq : 0.6452
+  n : 1.44
+  rot_angle : 0
+#====================
+#     Geometry
+#====================
+
+geometry : 
+  
+  fused_silica_substrate_block:
+    block : True
+    varies_with_radius : False
+    
+    # Block Dimensions
+    xdim : 0.68
+    ydim : 0.68
+    zdim : 0
+    
+    # Center
+    xcen : 0
+    ycen : -2.21
+    zcen : 0
+    
+    # Medium Identifier
+    n : 1.44
+    
+  PDMS_block:
+    block : True
+    
+    xdim : 0.68
+    ydim : 1.32
+    zdim : 0
+      
+    xcen : 0
+    ycen : -1.21
+    zcen : 0
+    # Medium Identifier     
+    n : 1.4
+    
+  amorphous_silicon_cylinder:
+    block : False
+    height : 1.02
+    
+    xcen : 0
+    ycen : -1.36
+    zcen : 0
+
+    # Medium Identifier
+    n : 3.48
+#=================
+#   Sources
+#=================
+
+source:
+  continous_source:
+    freq : 0.6452
+    
+    xcen : 0
+    ycen : -2.55
+    zcen : 0
+    
+    xdim : 0.68
+    ydim : 0
+    zdim : 0
+    
+    # index of refraction of substrate
+    n : 1.44
+
+#=================
+#   Flux
+#=================
+
+flux_region:
+  xcen : 0
+  ycen : 1
+  zcen : 0
+
+  xdim : 0.7
+  ydim : 0
+  zdim : 0
+
+  fcen : 0.6452
+  df : 0
+  nfreq : 1
+
+  eig_parity : NO_PARITY
