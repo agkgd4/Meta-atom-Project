@@ -6,6 +6,7 @@ import meep as mp
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+#import torch
 
 def build_geometry(params, radius): 
     geometry = []
@@ -116,7 +117,71 @@ def build_sim(params,source,geometry=None):
     
     return sim
 
+def get_phases(sim,flux_obj):
+    result = sim.get_eigenmode_coefficients(flux_obj,[1],eig_parity=mp.NO_PARITY)
+    coeffs = result.alpha
+          
+    phase = np.angle(coeffs[0,0,0]) 
+    # if phase > 0:
+    #   phase -= 2*np.pi
+
+    return phase
+
+def get_fluxes(sim,flux_object):
+    res = sim.get_eigenmode_coefficients(flux_object,[1],eig_parity=mp.NO_PARITY)
+    coeffs = res.alpha
+    mode_tran = abs(coeffs[0,0,0])**2
+
+    return mode_tran
+
+def interpret_data(data):
+    initial_flux=data[0,1]
+    # initial_phase=data[0,2]
+    
+    fluxes = data[:,1]
+    phases = data[:,2]
+    indices = np.where(phases > 0)
+    phases[indices] -= 2*np.pi
+
+    fluxes = fluxes / initial_flux
+    # phase = np.angle(coeffs[0,0,0]) 
+
+    data[:,1]=fluxes
+    data[:,2]=phases
+    return data
+
+def get_csv_for_full_radius_range(fluxes,phases,radii,num,params):
+    #build geometry, sources, and simulation
+    for radius in tqdm(np.linspace(0.2,0.25,num=num),leave=False):   # min=0.075, max=0.25
+        geometry = build_geometry(params,radius)
+        sources = build_source(params)
+        sim = build_sim(params,sources,geometry)
+    
+        #get flux from simulation
+        flux_obj = build_flux_region(params,sim)
+
+        sim.run(until=39)
+
+        fluxes.append(get_fluxes(fluxes[0],sim,flux_obj))
+        phases.append(get_phases(sim,flux_obj))
+        radii.append(radius)
+
+        sim.reset_meep()
+
+    percent_transmitted,delta_phases = interpret_data(fluxes,phases)
+    #build_plots(radii,percent_transmitted,delta_phases)
+
+    import csv
+
+    fields = ['radii','percent transmitted','delta phases']
+    rows=[radii,percent_transmitted,delta_phases]
+
+    # with open('datafor200to250radwithYat1.csv','w') as csvfile:
+    #     writer = csv.writer(csvfile,delimiter=',')
+    #     writer.writerow(fields)
+    #     writer.writerows(rows)
 def build_flux_region(params,sim):
+
     params = params["flux_region"]
     xdim = params["xdim"]
     ydim = params["ydim"]
@@ -137,45 +202,66 @@ def build_flux_region(params,sim):
 
     return flux_region 
 
-def get_phases(sim,flux_obj):
-    result = sim.get_eigenmode_coefficients(flux_obj,[1],eig_parity=mp.NO_PARITY)
-    coeffs = result.alpha
-          
-    phase = np.angle(coeffs[0,0,0]) 
-    if phase > 0:
-      phase -= 2*np.pi
+def get_data_by_location(params,fluxes,phases,radii):
+    trial = []
+    for location in tqdm(np.linspace(1,2.5,7)):  #pml is at y=2.565
+        ycen=location
+        for radius in tqdm(np.linspace(0.22,0.25,num=num),leave=False):    
+            geometry = build_geometry(params,radius)
+            sources = build_source(params)
+            sim = build_sim(params,sources,geometry)
+    
+            #get flux from simulation
+            flux_obj = build_flux_region(params,sim,ycen)
 
-    return phase
+            sim.run(until=39)
 
-def get_fluxes(input_flux,sim,flux_object):
-    res = sim.get_eigenmode_coefficients(flux_object,[1],eig_parity=mp.NO_PARITY)
-    coeffs = res.alpha
-    mode_tran = abs(coeffs[0,0,0])**2
+            fluxes.append(get_fluxes(sim,flux_obj))
+            phases.append(get_phases(sim,flux_obj))
+            radii.append(radius)
+            
 
-    return mode_tran
+            sim.reset_meep()
 
-def interpret_data(fluxes,phases):
-    delta_phases = []
-    percent_transmitted = []
-    initial_flux = fluxes[0]
-    #initial_phase = phases[0]
+        percent_transmitted,delta_phases = interpret_data(initial_flux,fluxes,initial_phase,phases)
+        #fields = ['radii','percent transmitted','delta phases']
+        #rows=[radii,percent_transmitted,delta_phases]
+        
+        trial.append([radii.copy(),percent_transmitted.copy(),delta_phases.copy()])    
 
-    for flux in fluxes[1:]:
-        percent_transmitted.append(flux/initial_flux)
-     
-    for phase in phases[1:]:
-        delta_phases.append(phase)
+        radii.clear()
+        phases.clear()
+        fluxes.clear()
 
-    return percent_transmitted,delta_phases
+    np.save("data",trial)
 
-def build_plots(radii,fluxes,phases):
+def build_plots(data_norm):
     plt.style.use('science')
-    fig,ax = plt.subplots(1,2,figsize=(5,5))
     tickfontsize=14
     labelfontsize=16
     titlefontsize=22
+    radii = data_norm[:,0]
+    fluxes = data_norm[:,1]
+    phases = data_norm[:,2]
+    from IPython import embed
+    embed()
+
+    fig,ax = plt.subplots(1, 2, figsize=(11,8)) # may want to change. Also see DPI keyword
+    #fig,ax = plt.subplots(2, 2, figsize=(11,8)) 
+
+    fig.suptitle("Meta-atom Transmission",fontsize=titlefontsize)
+
+    # ax[0].set_xlabel("radii",fontsize=labelfontsize)
+    # ax[0].set_ylabel("phase",fontsize=labelfontsize)
+
+    # ax[1].set_xlabel("radii",fontsize=labelfontsize)
+    # ax[1].set_ylabel("trasmission",fontsize=labelfontsize)
+
+    # ax[0].plot(radii,phases)
+    # ax[1].plot(radii,fluxes)
+    print(f"radii ",radii)
     ax[0].set_title("Transmission Magnitude",fontsize=titlefontsize)
-    ax[0].plot(radii,fluxes,'b',label='Transmission')
+    ax[0].plot(radii[1:],fluxes[1:],'b',label='Transmission')
     ax[0].set_xlabel("Radius (nm)",fontsize=labelfontsize)
     ax[0].set_xticks([0.075,0.100,0.125,0.150,0.175,0.200,0.225,0.250])
     ax[0].set_xticklabels([75,100,125,150,175,200,225,250],fontsize=tickfontsize)
@@ -187,7 +273,7 @@ def build_plots(radii,fluxes,phases):
     
 
     ax[1].set_title("Transmission Phase",fontsize=titlefontsize)
-    ax[1].plot(radii,phases,'r',label='Phase')
+    ax[1].plot(radii[1:],phases[1:],'r',label='Phase')
     ax[1].set_xlabel("Radius (nm)",fontsize=labelfontsize)
     ax[1].set_xticks([0.075,0.100,0.125,0.150,0.175,0.200,0.225,0.250])
     ax[1].set_xticklabels([75,100,125,150,175,200,225,250],fontsize=tickfontsize)
@@ -199,17 +285,13 @@ def build_plots(radii,fluxes,phases):
 
     plt.tight_layout()
     plt.show()
-
-def plot_geometry(sim):
-    plt.figure(dpi=100)
-    sim.plot2D() 
-    plt.show()
+    # from IPython import embed
+    # embed()
 
 def run(params):
-    num=5
-    fluxes = []
-    phases = []
-    radii = []
+    num=10
+    # initialize matrix for data collection. col0=radius, col1=transmission col2=phase
+    data=np.zeros((num+1,3))    #data[0,0] = zero for initial condition which has no cylinder
     mp.verbosity(0)
 
     #wave propagating without meta-atom
@@ -217,44 +299,33 @@ def run(params):
     sim = build_sim(params,sources)
     flux_obj = build_flux_region(params,sim)
     sim.run(until=39)
+    data[0,1]=mp.get_fluxes(flux_obj)[0]    # put initial flux in col1,row0
+    data[0,2]=get_phases(sim,flux_obj)      # put initial phase in col2,row0
 
-    fluxes.append(mp.get_fluxes(flux_obj)[0])
-    phases.append(get_phases(sim,flux_obj))
-    
-    # sim.plot2D(fields=mp.Ez)
-    # plt.show()
+    initial_flux=data[0,1]      # assign initial flux to a variable
+    initial_phase=data[0,2]     # assign initial phase to a variable
+
     sim.reset_meep()
-    # input()
-
-    #build geometry, sources, and simulation
-    for radius in tqdm(np.linspace(0.075,0.25,num=num),leave=False):
+    pbar=tqdm(total=num,leave=False)
+    for i,radius in enumerate(np.linspace(0.075,0.25,num=num)): 
         geometry = build_geometry(params,radius)
         sources = build_source(params)
         sim = build_sim(params,sources,geometry)
     
         #get flux from simulation
         flux_obj = build_flux_region(params,sim)
-
         sim.run(until=39)
-
-        fluxes.append(get_fluxes(fluxes[0],sim,flux_obj))
-        phases.append(get_phases(sim,flux_obj))
-        radii.append(radius)
+        flux=get_fluxes(sim,flux_obj)
+        phase=get_phases(sim,flux_obj)
+        data[i+1,:]=[radius,flux,phase]
 
         sim.reset_meep()
 
-    percent_transmitted,delta_phases = interpret_data(fluxes,phases)
-    build_plots(radii,percent_transmitted,delta_phases)
+        pbar.update(1)
 
-    import csv
-
-    fields = ['radii','percent transmitted','delta phases']
-    rows=[radii,percent_transmitted,delta_phases]
-
-    with open('data.csv','w') as csvfile:
-        writer = csv.writer(csvfile,delimiter=',')
-        writer.writerow(fields)
-        #np.transpose(radii)
-        writer.writerows(rows)
-        # writer.writerows(percent_transmitted)
-        # writer.writerows(delta_phases)
+    pbar.close()
+    
+    data_norm = interpret_data(data.copy())
+    # from IPython import embed
+    # embed()
+    build_plots(data_norm)

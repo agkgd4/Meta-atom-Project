@@ -14,7 +14,7 @@ cell_config:
   #     Resolution
   #======================
 
-  resolution : 10
+  resolution : 50
 
   #===========================
   # Perfectly Matched Layers
